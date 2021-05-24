@@ -162,15 +162,22 @@ fn usage() {
 impl Login {
     fn new(
         mut title: String,
-        website: Option<Url>,
+        mut website: Option<Url>,
         username: Option<String>,
         password: Option<String>,
         notes: Option<String>,
     ) -> Self {
+        // If website is empty but title looks like it could work as a url, try that
+        if website.is_none() && title.contains('.') && !title.contains(' ') {
+            if let Ok(maybe_website) = format!("https://{}", title).parse() {
+                website = Some(maybe_website);
+            }
+        }
+
+        // Strip the leading domain name from the title if present
         if let (true, Some(url)) = (title.contains(' '), &website) {
             let (first, rest) = title.split_once(' ').unwrap();
             if url.host_str() == Some(first) {
-                // Strip the leading domain name from the title
                 title = rest.to_string()
             }
         }

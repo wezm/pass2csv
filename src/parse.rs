@@ -124,6 +124,7 @@ impl<'a> From<RawRecord<'a>> for Record {
                 .iter()
                 .find_map(|&key| raw.fields.get(key))
                 .map(|&s| parse_url(s));
+
             // Remove fields that we don't need to retain now
             raw.fields.retain(|key, _value| {
                 !(WEBSITE_FIELDS.contains(&key.as_ref())
@@ -274,6 +275,19 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
         let expected = Record::SecureNote(SecureNote {
             title: String::from("multiline secure note"),
             text: String::from(text),
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_just_password() {
+        let actual = parse_path("tests/example.com.txt");
+        let expected = Record::Login(Login {
+            title: String::from("example.com"),
+            website: Some("https://example.com".parse().unwrap()),
+            username: None,
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
         });
         assert_eq!(actual, expected)
     }

@@ -175,16 +175,11 @@ impl Login {
         }
 
         // Strip the leading domain name from the title if present
-        if let (true, Some(url)) = (title.contains(' '), &website) {
+        let candidate = title.contains(' ') && !title.contains('(');
+        if let (true, Some(host)) = (candidate, website.as_ref().and_then(|url| url.host_str())) {
             let (first, rest) = title.split_once(' ').unwrap();
-            match (url.host_str(), &username) {
-                (Some(host), Some(username)) if host == first => {
-                    if title != format!("{} ({})", host, username) {
-                        title = rest.to_string()
-                    }
-                }
-                (Some(host), None) if host == first => title = rest.to_string(),
-                _ => {}
+            if host == first {
+                title = rest.to_string()
             }
         }
 

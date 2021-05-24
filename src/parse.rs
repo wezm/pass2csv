@@ -321,6 +321,19 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
     }
 
     #[test]
+    fn test_keep_domain_in_title_when_paren() {
+        let actual = parse_path("tests/typekit.com (example).txt");
+        let expected = Record::Login(Login {
+            title: String::from("typekit.com (example)"),
+            website: Some("https://typekit.com/users/new/trial".parse().unwrap()),
+            username: Some(String::from("typekit@example.com")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
     fn test_case_insensitive_pass() {
         let actual = parse_path("tests/wiki.trikeapps.com.txt");
         let expected = Record::Login(Login {

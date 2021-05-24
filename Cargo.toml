@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 csv = "1.1"
+hashlink = "0.7.0"
 serde = { version = "1", features = ["derive"] }
 url = { version = "2.2", features = ["serde"] }
 walkdir = "2.3.2"

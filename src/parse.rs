@@ -1,7 +1,7 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::path::Path;
 
+use hashlink::LinkedHashMap;
 use url::{ParseError, Url};
 
 use crate::{Login, RawRecord, Record, SecureNote, SoftwareLicence};
@@ -28,14 +28,14 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
         return RawRecord {
             path,
             password: Some(item.trim_end()),
-            fields: HashMap::new(),
+            fields: LinkedHashMap::new(),
         };
     }
 
     if item.split(':').count() == 2 {
         let (key, value) = item.split_once(':').unwrap();
         if !key.contains('\n') {
-            let mut fields = HashMap::new();
+            let mut fields = LinkedHashMap::new();
             fields.insert(Cow::from(key), value.trim_start());
             return RawRecord {
                 path,
@@ -45,7 +45,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
         }
     }
 
-    let mut fields = HashMap::new();
+    let mut fields = LinkedHashMap::new();
     let mut password = None;
 
     for line in item.lines() {
@@ -108,7 +108,14 @@ impl<'a> From<RawRecord<'a>> for Record {
             let username = raw.fields.iter().find_map(|(key, value)| {
                 for &field in LOGIN_FIELDS.iter() {
                     if key.contains(field) {
-                        return Some(value.to_string());
+                        if field == "mail" {
+                            // Ensure @ is present if we're matching on an email field
+                            if value.contains('@') {
+                                return Some(value.to_string());
+                            }
+                        } else {
+                            return Some(value.to_string());
+                        }
                     }
                 }
                 None
@@ -172,7 +179,7 @@ impl<'a> From<RawRecord<'a>> for Record {
     }
 }
 
-fn fields_to_notes<'a>(fields: HashMap<Cow<'a, str>, &'a str>) -> Option<String> {
+fn fields_to_notes<'a>(fields: LinkedHashMap<Cow<'a, str>, &'a str>) -> Option<String> {
     let notes = fields
         .into_iter()
         .filter_map(|(key, value)| {
@@ -198,5 +205,76 @@ fn parse_url(s: &str) -> Url {
             (String::from("https://") + s).parse().expect("invalid url")
         }
         Err(e) => panic!("invalid url: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use crate::{Login, Record, SecureNote};
+
+    fn parse_path<P: AsRef<Path>>(path: P) -> Record {
+        let path = path.as_ref();
+        let content = fs::read_to_string(&path).unwrap();
+        let raw = super::raw(&path, &content);
+        Record::from(raw)
+    }
+
+    #[test]
+    fn test_myer() {
+        // Tests:
+        // * title has domain removed from file stem
+        // * email field is only selected if it contains an @ in the value
+        let actual = parse_path("tests/m.myer.com.au Myer.txt");
+        let notes = r#"firstname: Wesley
+lastname: Wesley
+country: AU
+address1: Level 1, 123 Example St
+city: FITZROY
+zipcode: 3065
+state: VIC
+phone1type: CEL
+phone1: 0412345678
+create-account: Y"#;
+        let expected = Record::Login(Login {
+            title: String::from("Myer"),
+            website: Some("https://m.myer.com.au/webapp/wcs/stores/servlet/m20OrderShippingBillingDetailsView?catalogId=10051&langId=-1&storeId=10251".parse().unwrap()),
+            username: Some(String::from("test@example.com")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: Some(String::from(notes))
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_url_without_scheme() {
+        let actual = parse_path("tests/bugzilla.mozilla.org Mozilla bugzilla.txt");
+        let expected = Record::Login(Login {
+            title: String::from("Mozilla bugzilla"),
+            website: Some("https://bugzilla.mozilla.org/token.cgi".parse().unwrap()),
+            username: Some(String::from("test@example.com")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_multiline_secure_note() {
+        let actual = parse_path("tests/multiline secure note.txt");
+        let text = r"# START OF EXAMPLE KEY FILE
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
+# END OF EXAMPLE KEY FILE
+";
+        let expected = Record::SecureNote(SecureNote {
+            title: String::from("multiline secure note"),
+            text: String::from(text),
+        });
+        assert_eq!(actual, expected)
     }
 }

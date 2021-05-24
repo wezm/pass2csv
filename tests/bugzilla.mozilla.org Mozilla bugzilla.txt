@@ -1,0 +1,3 @@
+this-is-a-test-password
+url: bugzilla.mozilla.org/token.cgi
+Email: test@example.com

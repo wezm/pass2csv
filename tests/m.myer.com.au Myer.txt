@@ -1,0 +1,20 @@
+this-is-a-test-password
+Location: https://m.myer.com.au/webapp/wcs/stores/servlet/m20OrderShippingBillingDetailsView?catalogId=10051&langId=-1&storeId=10251
+label: website
+url: m.myer.com.au/webapp/wcs/stores/servlet/m20OrderShippingBillingDetailsView?catalogId=10051&langId=-1&storeId=10251
+: LOGIN
+email: email address
+guest-email-address: test@example.com
+firstName: Wesley
+lastName: Wesley
+email1: test@example.com
+country: AU
+address1: Level 1, 123 Example St
+city: FITZROY
+zipCode: 3065
+state: VIC
+phone1Type: CEL
+phone1: 0412345678
+sendSMSNotification: ✓
+create-account: Y
+htmlMethod: LB1

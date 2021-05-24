@@ -1,17 +1,17 @@
 mod parse;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, io};
 
+use hashlink::LinkedHashMap;
 use serde::Serialize;
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq)]
 enum Record {
     Login(Login),
     CreditCard(CreditCard),
@@ -23,10 +23,10 @@ enum Record {
 struct RawRecord<'a> {
     path: &'a Path,
     password: Option<&'a str>,
-    fields: HashMap<Cow<'a, str>, &'a str>,
+    fields: LinkedHashMap<Cow<'a, str>, &'a str>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq)]
 struct Login {
     title: String,
     website: Option<Url>,
@@ -35,7 +35,7 @@ struct Login {
     notes: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq)]
 struct CreditCard {
     title: String,
     card_number: String,
@@ -47,7 +47,7 @@ struct CreditCard {
     notes: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq)]
 struct SoftwareLicence {
     title: String,
     version: Option<String>,
@@ -65,7 +65,7 @@ struct SoftwareLicence {
     notes: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq)]
 struct SecureNote {
     title: String,
     text: String,

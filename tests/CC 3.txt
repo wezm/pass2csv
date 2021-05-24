@@ -1,0 +1,8 @@
+ccnum: 370000000000000
+cvv: 1234
+pin: 4567
+type: amex
+number: 370000000000000
+verification number: 1234
+expiry: 0/6/2018
+validFrom: 0/3/2015

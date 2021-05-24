@@ -4,7 +4,7 @@ use std::path::Path;
 use hashlink::LinkedHashMap;
 use url::{ParseError, Url};
 
-use crate::{Login, RawRecord, Record, SecureNote, SoftwareLicence};
+use crate::{CreditCard, Login, RawRecord, Record, SecureNote, SoftwareLicence};
 
 const SKIP_KEYS: &[&str] = &["^html", "^recaptcha", "commit", "op", "label"];
 const SKIP_VALUES: &[&str] = &["✓"];
@@ -16,7 +16,7 @@ const LOGIN_FIELDS: &[&str] = &[
     "membership no",
     "medicarecardnumber",
 ];
-const NOTE_FIELDS: &[&str] = &["comments"];
+const NOTE_FIELDS: &[&str] = &["comments", "customIcon"];
 const WEBSITE_FIELDS: &[&str] = &["location", "url", "website"];
 
 pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
@@ -54,7 +54,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
     for line in item.lines() {
         if let Some((key, value)) = line.split_once(": ") {
             let key = key.to_ascii_lowercase();
-            if key.contains("pass") {
+            if key.contains("pass") || key.contains("pwd") {
                 // Use as password or skip if password is already set
                 if password.is_none() {
                     password = Some(value.trim_start())
@@ -108,40 +108,45 @@ impl<'a> From<RawRecord<'a>> for Record {
             .map(|s| s.to_string())
             .unwrap_or_else(|| title_from_path(raw.path));
         if let Some(password) = raw.password {
-            // Try to find username
-            let username = raw.fields.iter().find_map(|(key, value)| {
-                for &field in LOGIN_FIELDS.iter() {
-                    if key.contains(field) {
-                        if field == "mail" {
-                            // Ensure @ is present if we're matching on an email field
-                            if value.contains('@') {
+            if raw.fields.contains_key("cardholder") && raw.fields.contains_key("number") {
+                let card = read_credit_card(title, &raw);
+                Record::CreditCard(card)
+            } else {
+                // Try to find username
+                let username = raw.fields.iter().find_map(|(key, value)| {
+                    for &field in LOGIN_FIELDS.iter() {
+                        if key.contains(field) {
+                            if field == "mail" {
+                                // Ensure @ is present if we're matching on an email field
+                                if value.contains('@') {
+                                    return Some(value.to_string());
+                                }
+                            } else {
                                 return Some(value.to_string());
                             }
-                        } else {
-                            return Some(value.to_string());
                         }
                     }
-                }
-                None
-            });
-            let website = WEBSITE_FIELDS
-                .iter()
-                .find_map(|&key| raw.fields.get(key))
-                .map(|&s| parse_url(s));
+                    None
+                });
+                let website = WEBSITE_FIELDS
+                    .iter()
+                    .find_map(|&key| raw.fields.get(key))
+                    .map(|&s| parse_url(s));
 
-            // Remove fields that we don't need to retain now
-            raw.fields.retain(|key, _value| {
-                !(WEBSITE_FIELDS.contains(&key.as_ref())
-                    || LOGIN_FIELDS.iter().any(|&field| key.contains(field)))
-            });
-            let login = Login::new(
-                title,
-                website,
-                username,
-                Some(password.to_string()),
-                fields_to_notes(Some(password), raw.fields),
-            );
-            Record::Login(login)
+                // Remove fields that we don't need to retain now
+                raw.fields.retain(|key, _value| {
+                    !(WEBSITE_FIELDS.contains(&key.as_ref())
+                        || LOGIN_FIELDS.iter().any(|&field| key.contains(field)))
+                });
+                let login = Login::new(
+                    title,
+                    website,
+                    username,
+                    Some(password.to_string()),
+                    fields_to_notes(Some(password), raw.fields),
+                );
+                Record::Login(login)
+            }
         } else if raw.fields.contains_key("licensed to") {
             let version = raw
                 .fields
@@ -202,6 +207,9 @@ impl<'a> From<RawRecord<'a>> for Record {
             }
             .sanitise();
             Record::SoftwareLicence(software)
+        } else if raw.fields.contains_key("number") {
+            let card = read_credit_card(title, &raw);
+            Record::CreditCard(card)
         } else {
             if let Some(notes) = NOTE_FIELDS.iter().find_map(|&key| raw.fields.get(key)) {
                 let note = SecureNote {
@@ -257,12 +265,45 @@ fn parse_url(s: &str) -> Url {
     }
 }
 
+fn read_credit_card(title: String, raw: &RawRecord) -> CreditCard {
+    let card_number = raw.fields.get("number").map(|&s| String::from(s));
+    let expiry_date = raw
+        .fields
+        .get("expiry date")
+        .or(raw.fields.get("expiry"))
+        .map(|&s| String::from(s));
+    let cardholder_name = raw.fields.get("cardholder").map(|&s| String::from(s));
+    let pin = raw
+        .password
+        .or_else(|| raw.fields.get("pin").map(|&v| v))
+        .map(String::from);
+    let bank_name = raw.fields.get("bank name").map(|&s| String::from(s));
+    let cvv = raw
+        .fields
+        .get("cvc")
+        .or(raw.fields.get("cvv"))
+        .map(|&s| String::from(s));
+    let notes = None;
+
+    let card = CreditCard {
+        title,
+        card_number: card_number.expect("missing card number"),
+        expiry_date,
+        cardholder_name,
+        pin,
+        bank_name,
+        cvv,
+        notes,
+    };
+    card
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::{Login, Record, SecureNote, SoftwareLicence};
+    use crate::{CreditCard, Login, Record, SecureNote, SoftwareLicence};
 
     fn parse_path<P: AsRef<Path>>(path: P) -> Record {
         let path = path.as_ref();
@@ -468,6 +509,54 @@ blargh: thing
             support_email: Some(String::from("support@agilebits.com")),
             purchase_date: Some(String::from("6/10/2013")),
             order_number: Some(String::from("0000000")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_credit_card_1() {
+        let actual = parse_path("tests/CC 1.txt");
+        let expected = Record::CreditCard(CreditCard {
+            title: String::from("CC 1"),
+            card_number: String::from("376000000000000"),
+            expiry_date: Some(String::from("02/20")),
+            cardholder_name: Some(String::from("First Last")),
+            pin: None,
+            bank_name: None,
+            cvv: Some(String::from("1234")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_credit_card_2() {
+        let actual = parse_path("tests/CC 2.txt");
+        let expected = Record::CreditCard(CreditCard {
+            title: String::from("CC 2"),
+            card_number: String::from("4100000000000000"),
+            expiry_date: Some(String::from("02/2026")),
+            cardholder_name: Some(String::from("First Last")),
+            pin: Some(String::from("1234")),
+            bank_name: None,
+            cvv: Some(String::from("123")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_credit_card_3() {
+        let actual = parse_path("tests/CC 3.txt");
+        let expected = Record::CreditCard(CreditCard {
+            title: String::from("CC 3"),
+            card_number: String::from("370000000000000"),
+            expiry_date: Some(String::from("0/6/2018")),
+            cardholder_name: None,
+            pin: Some(String::from("4567")),
+            bank_name: None,
+            cvv: Some(String::from("1234")),
             notes: None,
         });
         assert_eq!(actual, expected)

@@ -1,0 +1,6 @@
+1234
+type: visa
+number: 4100000000000000
+cardholder: First Last
+expiry: 02/2026
+cvv: 123

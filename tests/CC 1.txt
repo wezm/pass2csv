@@ -1,0 +1,5 @@
+Cardholder: First Last
+Type: American Express
+Number: 376000000000000
+CVC: 1234
+Expiry date: 02/20

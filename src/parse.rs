@@ -20,6 +20,7 @@ const NOTE_FIELDS: &[&str] = &["comments"];
 const WEBSITE_FIELDS: &[&str] = &["location", "url", "website"];
 
 pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
+    eprintln!("{}", path.display());
     if item.lines().count() == 1
         && item
             .lines()
@@ -33,7 +34,8 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
         };
     }
 
-    if item.split(':').count() == 2 {
+    // Probably a secure note
+    if item.split(':').count() == 2 || item.starts_with("comments: ") {
         let (key, value) = item.split_once(':').unwrap();
         if !key.contains('\n') {
             let mut fields = LinkedHashMap::new();
@@ -87,8 +89,8 @@ fn skip_key(key: &str) -> bool {
         })
 }
 
-fn skip_value(value: &str) -> bool {
-    SKIP_VALUES.contains(&value)
+fn skip_value(password: Option<&str>, value: &str) -> bool {
+    password.map_or(false, |password| value == password) || SKIP_VALUES.contains(&value)
 }
 
 fn title_from_path(path: &Path) -> String {
@@ -137,7 +139,7 @@ impl<'a> From<RawRecord<'a>> for Record {
                 website,
                 username,
                 Some(password.to_string()),
-                fields_to_notes(raw.fields),
+                fields_to_notes(Some(password), raw.fields),
             );
             Record::Login(login)
         } else if raw.fields.contains_key("licensed to") {
@@ -213,7 +215,7 @@ impl<'a> From<RawRecord<'a>> for Record {
                     Some(parse_url(raw.fields["website"])),
                     None,
                     None,
-                    fields_to_notes(raw.fields),
+                    fields_to_notes(None, raw.fields),
                 );
                 Record::Login(login)
             } else {
@@ -223,11 +225,14 @@ impl<'a> From<RawRecord<'a>> for Record {
     }
 }
 
-fn fields_to_notes<'a>(fields: LinkedHashMap<Cow<'a, str>, &'a str>) -> Option<String> {
+fn fields_to_notes<'a>(
+    password: Option<&str>,
+    fields: LinkedHashMap<Cow<'a, str>, &'a str>,
+) -> Option<String> {
     let notes = fields
         .into_iter()
         .filter_map(|(key, value)| {
-            if skip_key(&key) || skip_value(value) {
+            if skip_key(&key) || skip_value(password, value) {
                 eprintln!("skip: {} → {}", key, value);
                 None
             } else {
@@ -323,6 +328,20 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
     }
 
     #[test]
+    fn test_multiline_secure_note_with_colons() {
+        let actual = parse_path("tests/multiline secure note with colons.txt");
+        let text = r"asfd
+
+blargh: thing
+";
+        let expected = Record::SecureNote(SecureNote {
+            title: String::from("multiline secure note with colons"),
+            text: String::from(text),
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
     fn test_just_password() {
         let actual = parse_path("tests/example.com.txt");
         let expected = Record::Login(Login {
@@ -387,6 +406,19 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
             username: Some(String::from("Wmoore")),
             password: Some(String::from("this-is-a-test-password")),
             notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_strip_password_confirmations() {
+        let actual = parse_path("tests/password confirmation.txt");
+        let expected = Record::Login(Login {
+            title: String::from("password confirmation"),
+            website: Some("https://example.com".parse().unwrap()),
+            username: Some(String::from("test@example.com")),
+            password: Some(String::from("XXXXXXXXXXXXXXXXXXXX")),
+            notes: Some(String::from("firstname: Wesley Moore")),
         });
         assert_eq!(actual, expected)
     }

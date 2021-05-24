@@ -291,4 +291,30 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
         });
         assert_eq!(actual, expected)
     }
+
+    #[test]
+    fn test_keep_domain_in_title_when_ip_address() {
+        let actual = parse_path("tests/192.168.0.8 (Administrator).txt");
+        let expected = Record::Login(Login {
+            title: String::from("192.168.0.8 (Administrator)"),
+            website: Some("http://192.168.0.8".parse().unwrap()),
+            username: Some(String::from("Administrator")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_keep_domain_in_title_when_second_part_is_username() {
+        let actual = parse_path("tests/yousendit.com (test@example.com).txt");
+        let expected = Record::Login(Login {
+            title: String::from("yousendit.com (test@example.com)"),
+            website: Some("http://yousendit.com".parse().unwrap()),
+            username: Some(String::from("test@example.com")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
 }

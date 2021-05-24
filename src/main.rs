@@ -123,7 +123,7 @@ fn walk(path: &Path) -> Result<(), Box<dyn Error>> {
     for entry in walker
         .filter_entry(entry_filter)
         .into_iter()
-        .skip(20)
+        .skip(30)
         .take(10)
     {
         let entry = entry.unwrap();
@@ -177,8 +177,14 @@ impl Login {
         // Strip the leading domain name from the title if present
         if let (true, Some(url)) = (title.contains(' '), &website) {
             let (first, rest) = title.split_once(' ').unwrap();
-            if url.host_str() == Some(first) {
-                title = rest.to_string()
+            match (url.host_str(), &username) {
+                (Some(host), Some(username)) if host == first => {
+                    if title != format!("{} ({})", host, username) {
+                        title = rest.to_string()
+                    }
+                }
+                (Some(host), None) if host == first => title = rest.to_string(),
+                _ => {}
             }
         }
 

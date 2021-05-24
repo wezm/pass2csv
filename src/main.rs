@@ -123,7 +123,7 @@ fn walk(path: &Path) -> Result<(), Box<dyn Error>> {
     for entry in walker
         .filter_entry(entry_filter)
         .into_iter()
-        .skip(30)
+        .skip(40)
         .take(10)
     {
         let entry = entry.unwrap();

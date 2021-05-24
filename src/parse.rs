@@ -12,6 +12,7 @@ const LOGIN_FIELDS: &[&str] = &[
     "login",
     "username",
     "mail",
+    "wpname",
     "membership no",
     "medicarecardnumber",
 ];
@@ -50,6 +51,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
 
     for line in item.lines() {
         if let Some((key, value)) = line.split_once(": ") {
+            let key = key.to_ascii_lowercase();
             if key.contains("pass") {
                 // Use as password or skip if password is already set
                 if password.is_none() {
@@ -58,7 +60,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
             } else if value == "✓" {
                 // skip
             } else {
-                fields.insert(Cow::from(key.to_ascii_lowercase()), value.trim_start());
+                fields.insert(Cow::from(key), value.trim_start());
             }
         } else if password.is_none() {
             password = Some(line)
@@ -312,6 +314,23 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
             title: String::from("yousendit.com (test@example.com)"),
             website: Some("http://yousendit.com".parse().unwrap()),
             username: Some(String::from("test@example.com")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_case_insensitive_pass() {
+        let actual = parse_path("tests/wiki.trikeapps.com.txt");
+        let expected = Record::Login(Login {
+            title: String::from("wiki.trikeapps.com"),
+            website: Some(
+                "https://wiki.trikeapps.com/index.php/Special:UserLogin"
+                    .parse()
+                    .unwrap(),
+            ),
+            username: Some(String::from("Wmoore")),
             password: Some(String::from("this-is-a-test-password")),
             notes: None,
         });

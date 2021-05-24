@@ -1,0 +1,8 @@
+Location: https://wiki.trikeapps.com/index.php/Special:UserLogin
+url: wiki.trikeapps.com/index.php/Special:UserLogin
+wpName: Wmoore
+wpPassword: this-is-a-test-password
+wpLoginAttempt: Log in
+htmlAction: https://wiki.trikeapps.com/index.php?title=Special:UserLogin&action=submitlogin&type=login
+htmlMethod: post
+htmlName: userlogin

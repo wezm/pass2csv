@@ -192,3 +192,23 @@ impl Login {
         }
     }
 }
+
+impl SoftwareLicence {
+    fn sanitise(mut self) -> Self {
+        // Strip the leading domain name from the title if present
+        let host = self
+            .download_link
+            .as_ref()
+            .or(self.publishers_website.as_ref())
+            .and_then(|url| url.host_str());
+        let title = &self.title;
+        let candidate = title.contains(' ') && !title.contains('(');
+        if let (true, Some(host)) = (candidate, host) {
+            let (first, rest) = title.split_once(' ').unwrap();
+            if host == first {
+                self.title = rest.to_string()
+            }
+        }
+        self
+    }
+}

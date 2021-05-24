@@ -1,0 +1,8 @@
+download link: http://mizage.com/divvy/downloads/Divvy.zip
+reg code: TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-AAAA
+reg email: test@example.com
+reg name: Wesley Moore
+license key: TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-AAAA
+licensed to: Wesley Moore
+registered email: test@example.com
+download page: http://mizage.com/divvy/downloads/Divvy.zip

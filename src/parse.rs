@@ -141,23 +141,64 @@ impl<'a> From<RawRecord<'a>> for Record {
             );
             Record::Login(login)
         } else if raw.fields.contains_key("licensed to") {
-            // FIXME
+            let version = raw
+                .fields
+                .get("product version")
+                .or_else(|| raw.fields.get("version"))
+                .map(|&s| String::from(s));
+            let license_key = raw
+                .fields
+                .get("license key")
+                .or_else(|| raw.fields.get("reg code"))
+                .map(|&s| String::from(s));
+            let your_name = raw
+                .fields
+                .get("licensed to")
+                .or_else(|| raw.fields.get("reg name"))
+                .map(|&s| String::from(s));
+            let your_email = raw
+                .fields
+                .get("registered email")
+                .or_else(|| raw.fields.get("reg email"))
+                .map(|&s| String::from(s));
+            // let company = raw.fields.get("")
+            let download_link = raw
+                .fields
+                .get("download link")
+                .or_else(|| raw.fields.get("download page"))
+                .map(|link| link.parse().unwrap());
+            let software_publisher = raw
+                .fields
+                .get("publisher name")
+                .or_else(|| raw.fields.get("publisher"))
+                .map(|&s| String::from(s));
+            let publishers_website = raw
+                .fields
+                .get("publisher website")
+                .or_else(|| raw.fields.get("website"))
+                .map(|link| link.parse().unwrap());
+            // let retail_price = raw.fields.get("");
+            let support_email = raw.fields.get("support email").map(|&s| String::from(s));
+            let purchase_date = raw.fields.get("order date").map(|&s| String::from(s));
+            let order_number = raw.fields.get("order number").map(|&s| String::from(s));
+
             let software = SoftwareLicence {
                 title,
-                version: None,
-                license_key: None,
-                your_name: None,
-                your_email: None,
+                version,
+                license_key,
+                your_name,
+                your_email,
                 company: None,
-                download_link: None,
-                software_publisher: None,
-                publishers_website: None,
+                download_link,
+                software_publisher,
+                publishers_website,
                 retail_price: None,
-                support_email: None,
-                purchase_date: None,
-                order_number: None,
+                support_email,
+                purchase_date,
+                order_number,
                 notes: None,
-            };
+            }
+            .sanitise();
             Record::SoftwareLicence(software)
         } else {
             if let Some(notes) = NOTE_FIELDS.iter().find_map(|&key| raw.fields.get(key)) {
@@ -216,7 +257,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use crate::{Login, Record, SecureNote};
+    use crate::{Login, Record, SecureNote, SoftwareLicence};
 
     fn parse_path<P: AsRef<Path>>(path: P) -> Record {
         let path = path.as_ref();
@@ -345,6 +386,56 @@ DDDDDDDDDDDDDDDDDDDDDDDDDDD/DDDDDDDDD/DDDDDDDDDDDD+XtKG=
             ),
             username: Some(String::from("Wmoore")),
             password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_software_license_incomplete() {
+        let actual = parse_path("tests/Divvy.txt");
+        let expected = Record::SoftwareLicence(SoftwareLicence {
+            title: String::from("Divvy"),
+            version: None,
+            license_key: Some(String::from(
+                "TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-TEST-AAAA",
+            )),
+            your_name: Some(String::from("Wesley Moore")),
+            your_email: Some(String::from("test@example.com")),
+            company: None,
+            download_link: Some(
+                "http://mizage.com/divvy/downloads/Divvy.zip"
+                    .parse()
+                    .unwrap(),
+            ),
+            software_publisher: None,
+            publishers_website: None,
+            retail_price: None,
+            support_email: None,
+            purchase_date: None,
+            order_number: None,
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_software_license_complete() {
+        let actual = parse_path("tests/agilebits.com 1Password 5.txt");
+        let expected = Record::SoftwareLicence(SoftwareLicence {
+            title: String::from("1Password 5"),
+            version: Some(String::from("5.0.2")),
+            license_key: None,
+            your_name: Some(String::from("Wesley Moore")),
+            your_email: Some(String::from("test@example.com")),
+            company: None,
+            download_link: Some("https://agilebits.com/downloads".parse().unwrap()),
+            software_publisher: Some(String::from("AgileBits Inc.")),
+            publishers_website: Some("https://agilebits.com/onepassword".parse().unwrap()),
+            retail_price: None,
+            support_email: Some(String::from("support@agilebits.com")),
+            purchase_date: Some(String::from("6/10/2013")),
+            order_number: Some(String::from("0000000")),
             notes: None,
         });
         assert_eq!(actual, expected)

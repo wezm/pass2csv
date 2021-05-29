@@ -4,20 +4,28 @@ use std::path::Path;
 use hashlink::LinkedHashMap;
 use url::{ParseError, Url};
 
-use crate::{CreditCard, Login, RawRecord, Record, SecureNote, SoftwareLicence};
+use crate::{CreditCard, Login, Record, SecureNote, SoftwareLicence};
 
 const SKIP_KEYS: &[&str] = &["^html", "^recaptcha", "commit", "op", "label"];
 const SKIP_VALUES: &[&str] = &["✓"];
 const LOGIN_FIELDS: &[&str] = &[
-    "login",
-    "username",
-    "mail",
+    "^login",
+    "^username",
+    "^mail",
     "wpname",
     "membership no",
     "medicarecardnumber",
+    "e",
 ];
-const NOTE_FIELDS: &[&str] = &["comments", "customIcon"];
+const NOTE_FIELDS: &[&str] = &["comments", "customIcon", "predicate b64"];
 const WEBSITE_FIELDS: &[&str] = &["location", "url", "website"];
+
+#[derive(Debug)]
+pub struct RawRecord<'a> {
+    path: &'a Path,
+    password: Option<&'a str>,
+    fields: LinkedHashMap<Cow<'a, str>, &'a str>,
+}
 
 pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
     eprintln!("{}", path.display());
@@ -54,7 +62,11 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
     for line in item.lines() {
         if let Some((key, value)) = line.split_once(": ") {
             let key = key.to_ascii_lowercase();
-            if key.contains("pass") || key.contains("pwd") {
+            if key.contains("pass")
+                || key.contains("pwd")
+                || key == "p"
+                || key.starts_with("reg-pw")
+            {
                 // Use as password or skip if password is already set
                 if password.is_none() {
                     password = Some(value.trim_start())
@@ -66,8 +78,21 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
             }
         } else if password.is_none() {
             password = Some(line)
+        } else if password.is_some() && fields.len() == 1 && fields.contains_key("comments") {
+            // This is a secure note with a password, such as an ssh key
+            let pos = item.find("comments: ").unwrap();
+            let note = &item[pos + "comments: ".len()..];
+            fields.insert(Cow::from("comments"), note);
+            return RawRecord {
+                path,
+                password,
+                fields,
+            };
         } else {
-            panic!("error: malformed item: {}", item);
+            panic!(
+                "error: malformed item: {:?}, {:?}: {}",
+                password, fields, item
+            );
         }
     }
 
@@ -79,14 +104,15 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
 }
 
 fn skip_key(key: &str) -> bool {
-    key.is_empty()
-        || SKIP_KEYS.iter().any(|&skip| {
-            if skip.starts_with('^') {
-                key.starts_with(&skip[1..])
-            } else {
-                key == skip
-            }
-        })
+    key.is_empty() || SKIP_KEYS.iter().any(|&skip| matches(skip, key))
+}
+
+fn matches(pattern: &str, value: &str) -> bool {
+    if pattern.starts_with('^') {
+        value.starts_with(&pattern[1..])
+    } else {
+        value == pattern
+    }
 }
 
 fn skip_value(password: Option<&str>, value: &str) -> bool {
@@ -115,8 +141,8 @@ impl<'a> From<RawRecord<'a>> for Record {
                 // Try to find username
                 let username = raw.fields.iter().find_map(|(key, value)| {
                     for &field in LOGIN_FIELDS.iter() {
-                        if key.contains(field) {
-                            if field == "mail" {
+                        if matches(field, key) {
+                            if field == "mail" || field == "e" {
                                 // Ensure @ is present if we're matching on an email field
                                 if value.contains('@') {
                                     return Some(value.to_string());
@@ -147,7 +173,7 @@ impl<'a> From<RawRecord<'a>> for Record {
                 );
                 Record::Login(login)
             }
-        } else if raw.fields.contains_key("licensed to") {
+        } else if raw.fields.contains_key("license key") || raw.fields.contains_key("licensed to") {
             let version = raw
                 .fields
                 .get("product version")
@@ -259,7 +285,10 @@ fn parse_url(s: &str) -> Url {
     match s.parse() {
         Ok(url) => url,
         Err(ParseError::RelativeUrlWithoutBase) => {
-            (String::from("https://") + s).parse().expect("invalid url")
+            let fallback = String::from("https://") + s;
+            fallback
+                .parse()
+                .expect(&format!("invalid fallback url: {}", fallback))
         }
         Err(e) => panic!("invalid url: {}", e),
     }
@@ -378,6 +407,26 @@ blargh: thing
         let expected = Record::SecureNote(SecureNote {
             title: String::from("multiline secure note with colons"),
             text: String::from(text),
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_multiline_secure_note_with_password() {
+        let actual = parse_path("tests/multiline secure note with password.txt");
+        let notes = Some(
+            r"comments: line 1
+line 2
+line 3
+"
+            .to_string(),
+        );
+        let expected = Record::Login(Login {
+            title: String::from("multiline secure note with password"),
+            website: None,
+            username: None,
+            password: Some(String::from("this-is-a-test-password")),
+            notes,
         });
         assert_eq!(actual, expected)
     }

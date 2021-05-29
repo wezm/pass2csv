@@ -1,12 +1,10 @@
 mod parse;
 
-use std::borrow::Cow;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, io};
 
-use hashlink::LinkedHashMap;
 use serde::Serialize;
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
@@ -17,13 +15,6 @@ enum Record {
     CreditCard(CreditCard),
     SoftwareLicence(SoftwareLicence),
     SecureNote(SecureNote),
-}
-
-#[derive(Debug)]
-struct RawRecord<'a> {
-    path: &'a Path,
-    password: Option<&'a str>,
-    fields: LinkedHashMap<Cow<'a, str>, &'a str>,
 }
 
 #[derive(Debug, Serialize, Eq, PartialEq)]
@@ -123,8 +114,8 @@ fn walk(path: &Path) -> Result<(), Box<dyn Error>> {
     for entry in walker
         .filter_entry(entry_filter)
         .into_iter()
-        .skip(40)
-        .take(10)
+        .skip(840 + 300 + 100 + 69 + 275 + 87)
+    // .take(10)
     {
         let entry = entry.unwrap();
         println!("{}", entry.path().display());

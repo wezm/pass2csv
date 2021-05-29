@@ -122,7 +122,7 @@ fn walk(path: &Path) -> Result<(), Box<dyn Error>> {
         if entry.file_type().is_file() {
             let path = entry.path();
             let contents = decrypt(path)?;
-            let raw = parse::raw(path, &contents);
+            let raw = parse::raw(path, entry.depth(), &contents);
             println!("{:#?}", raw);
             let rec = Record::from(raw);
             println!("{:#?}", rec);

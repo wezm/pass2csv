@@ -9,9 +9,9 @@ use crate::{CreditCard, Login, Record, SecureNote, SoftwareLicence};
 const SKIP_KEYS: &[&str] = &["^html", "^recaptcha", "commit", "op", "label"];
 const SKIP_VALUES: &[&str] = &["✓"];
 const LOGIN_FIELDS: &[&str] = &[
-    "^login",
-    "^username",
-    "^mail",
+    "*login",
+    "*username",
+    "*mail",
     "wpname",
     "membership no",
     "medicarecardnumber",
@@ -23,11 +23,12 @@ const WEBSITE_FIELDS: &[&str] = &["location", "url", "website"];
 #[derive(Debug)]
 pub struct RawRecord<'a> {
     path: &'a Path,
+    depth: usize,
     password: Option<&'a str>,
     fields: LinkedHashMap<Cow<'a, str>, &'a str>,
 }
 
-pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
+pub(crate) fn raw<'a>(path: &'a Path, depth: usize, item: &'a str) -> RawRecord<'a> {
     eprintln!("{}", path.display());
     if item.lines().count() == 1
         && item
@@ -37,6 +38,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
     {
         return RawRecord {
             path,
+            depth,
             password: Some(item.trim_end()),
             fields: LinkedHashMap::new(),
         };
@@ -50,6 +52,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
             fields.insert(Cow::from(key), value.trim_start());
             return RawRecord {
                 path,
+                depth,
                 password: None,
                 fields,
             };
@@ -85,6 +88,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
             fields.insert(Cow::from("comments"), note);
             return RawRecord {
                 path,
+                depth,
                 password,
                 fields,
             };
@@ -98,6 +102,7 @@ pub(crate) fn raw<'a>(path: &'a Path, item: &'a str) -> RawRecord<'a> {
 
     RawRecord {
         path,
+        depth,
         password,
         fields,
     }
@@ -110,6 +115,8 @@ fn skip_key(key: &str) -> bool {
 fn matches(pattern: &str, value: &str) -> bool {
     if pattern.starts_with('^') {
         value.starts_with(&pattern[1..])
+    } else if pattern.starts_with('*') {
+        value.contains(&pattern[1..])
     } else {
         value == pattern
     }
@@ -119,11 +126,21 @@ fn skip_value(password: Option<&str>, value: &str) -> bool {
     password.map_or(false, |password| value == password) || SKIP_VALUES.contains(&value)
 }
 
-fn title_from_path(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|os| os.to_str())
-        .map(|s| s.to_string())
-        .unwrap()
+fn title_from_path(depth: usize, path: &Path) -> String {
+    if depth > 2 {
+        panic!("unhandled depth > 2")
+    } else if depth > 1 {
+        path.parent()
+            .and_then(|p| p.file_name())
+            .and_then(|os| os.to_str())
+            .map(|s| s.to_string())
+            .unwrap()
+    } else {
+        path.file_stem()
+            .and_then(|os| os.to_str())
+            .map(|s| s.to_string())
+            .unwrap()
+    }
 }
 
 impl<'a> From<RawRecord<'a>> for Record {
@@ -132,28 +149,43 @@ impl<'a> From<RawRecord<'a>> for Record {
             .fields
             .get("title")
             .map(|s| s.to_string())
-            .unwrap_or_else(|| title_from_path(raw.path));
+            .unwrap_or_else(|| title_from_path(raw.depth, raw.path));
         if let Some(password) = raw.password {
             if raw.fields.contains_key("cardholder") && raw.fields.contains_key("number") {
                 let card = read_credit_card(title, &raw);
                 Record::CreditCard(card)
             } else {
                 // Try to find username
-                let username = raw.fields.iter().find_map(|(key, value)| {
-                    for &field in LOGIN_FIELDS.iter() {
-                        if matches(field, key) {
-                            if field == "mail" || field == "e" {
-                                // Ensure @ is present if we're matching on an email field
-                                if value.contains('@') {
+                let username = raw
+                    .fields
+                    .iter()
+                    .find_map(|(key, value)| {
+                        for &field in LOGIN_FIELDS.iter() {
+                            if matches(field, key) {
+                                if field == "*mail" || field == "e" {
+                                    // Ensure @ is present if we're matching on an email field
+                                    if value.contains('@') {
+                                        return Some(value.to_string());
+                                    }
+                                } else {
                                     return Some(value.to_string());
                                 }
-                            } else {
-                                return Some(value.to_string());
                             }
                         }
-                    }
-                    None
-                });
+                        None
+                    })
+                    .or_else(|| {
+                        // Nested item
+                        if raw.depth > 1 {
+                            println!("nested item");
+                            raw.path
+                                .file_stem()
+                                .and_then(|os| os.to_str())
+                                .map(|s| s.to_string())
+                        } else {
+                            None
+                        }
+                    });
                 let website = WEBSITE_FIELDS
                     .iter()
                     .find_map(|&key| raw.fields.get(key))
@@ -162,7 +194,7 @@ impl<'a> From<RawRecord<'a>> for Record {
                 // Remove fields that we don't need to retain now
                 raw.fields.retain(|key, _value| {
                     !(WEBSITE_FIELDS.contains(&key.as_ref())
-                        || LOGIN_FIELDS.iter().any(|&field| key.contains(field)))
+                        || LOGIN_FIELDS.iter().any(|&field| matches(field, key)))
                 });
                 let login = Login::new(
                     title,
@@ -337,7 +369,8 @@ mod tests {
     fn parse_path<P: AsRef<Path>>(path: P) -> Record {
         let path = path.as_ref();
         let content = fs::read_to_string(&path).unwrap();
-        let raw = super::raw(&path, &content);
+        let depth = path.components().count() - 1;
+        let raw = super::raw(&path, depth, &content);
         Record::from(raw)
     }
 
@@ -509,6 +542,20 @@ line 3
             username: Some(String::from("test@example.com")),
             password: Some(String::from("XXXXXXXXXXXXXXXXXXXX")),
             notes: Some(String::from("firstname: Wesley Moore")),
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_nested_login() {
+        // Tests that the username, title, and url are picked from the path
+        let actual = parse_path("tests/example.com/wezm.txt");
+        let expected = Record::Login(Login {
+            title: String::from("example.com"),
+            website: Some("https://example.com".parse().unwrap()),
+            username: Some(String::from("wezm")),
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
         });
         assert_eq!(actual, expected)
     }

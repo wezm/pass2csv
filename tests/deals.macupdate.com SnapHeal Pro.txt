@@ -1,0 +1,18 @@
+comments: Download from https://www.macupdate.com/app/mac/49101/snapheal-pro
+download link: https://deals.macupdate.com/receipt/1234567890
+order number: 1234567890
+order total: 49.99
+product version: 1.0
+publisher name: MacUpdate Promo
+publisher website: https://deals.macupdate.com/
+reg code: ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ
+reg email: test@example.com
+reg name: Wesley Moore
+support email: support@macupdate.com
+version: 1.0
+license key: ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ
+licensed to: Wesley Moore
+registered email: test@example.com
+download page: https://deals.macupdate.com/receipt/1234567890
+publisher: MacUpdate Promo
+website: https://deals.macupdate.com/

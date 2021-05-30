@@ -29,7 +29,6 @@ pub struct RawRecord<'a> {
 }
 
 pub(crate) fn raw<'a>(path: &'a Path, depth: usize, item: &'a str) -> RawRecord<'a> {
-    eprintln!("{}", path.display());
     if item.lines().count() == 1
         && item
             .lines()
@@ -46,7 +45,7 @@ pub(crate) fn raw<'a>(path: &'a Path, depth: usize, item: &'a str) -> RawRecord<
 
     // Probably a secure note
     const COMMENTS: &str = "comments: ";
-    if item.split(':').count() == 2 || item.starts_with(COMMENTS) {
+    if item.split(':').count() == 2 || (item.starts_with(COMMENTS) && !item.contains("license key: ")) {
         let (key, value) = item.split_once(':').unwrap();
         if !key.contains('\n') {
             let mut fields = LinkedHashMap::new();
@@ -158,10 +157,13 @@ impl<'a> From<RawRecord<'a>> for Record {
             .get("title")
             .map(|s| s.to_string())
             .unwrap_or_else(|| title_from_path(raw.depth, raw.path));
-        if let Some(password) = raw.password {
+        if let Some(password) = raw.password.or_else(|| raw.fields.get("password").map(|&s| s)) {
             if raw.fields.contains_key("cardholder") && raw.fields.contains_key("number") {
                 let card = read_credit_card(title, &raw);
                 Record::CreditCard(card)
+            } else if raw.fields.contains_key("license key") || raw.fields.contains_key("licensed to") {
+                let software = read_software_licence(title, &raw);
+                Record::SoftwareLicence(software)
             } else {
                 // Try to find username
                 let username = raw
@@ -223,64 +225,7 @@ impl<'a> From<RawRecord<'a>> for Record {
                 Record::Login(login)
             }
         } else if raw.fields.contains_key("license key") || raw.fields.contains_key("licensed to") {
-            let version = raw
-                .fields
-                .get("product version")
-                .or_else(|| raw.fields.get("version"))
-                .map(|&s| String::from(s));
-            let license_key = raw
-                .fields
-                .get("license key")
-                .or_else(|| raw.fields.get("reg code"))
-                .map(|&s| String::from(s));
-            let your_name = raw
-                .fields
-                .get("licensed to")
-                .or_else(|| raw.fields.get("reg name"))
-                .map(|&s| String::from(s));
-            let your_email = raw
-                .fields
-                .get("registered email")
-                .or_else(|| raw.fields.get("reg email"))
-                .map(|&s| String::from(s));
-            // let company = raw.fields.get("")
-            let download_link = raw
-                .fields
-                .get("download link")
-                .or_else(|| raw.fields.get("download page"))
-                .map(|link| link.parse().unwrap());
-            let software_publisher = raw
-                .fields
-                .get("publisher name")
-                .or_else(|| raw.fields.get("publisher"))
-                .map(|&s| String::from(s));
-            let publishers_website = raw
-                .fields
-                .get("publisher website")
-                .or_else(|| raw.fields.get("website"))
-                .map(|link| link.parse().unwrap());
-            // let retail_price = raw.fields.get("");
-            let support_email = raw.fields.get("support email").map(|&s| String::from(s));
-            let purchase_date = raw.fields.get("order date").map(|&s| String::from(s));
-            let order_number = raw.fields.get("order number").map(|&s| String::from(s));
-
-            let software = SoftwareLicence {
-                title,
-                version,
-                license_key,
-                your_name,
-                your_email,
-                company: None,
-                download_link,
-                software_publisher,
-                publishers_website,
-                retail_price: None,
-                support_email,
-                purchase_date,
-                order_number,
-                notes: None,
-            }
-            .sanitise();
+            let software = read_software_licence(title, &raw);
             Record::SoftwareLicence(software)
         } else if raw.fields.contains_key("number") {
             let card = read_credit_card(title, &raw);
@@ -307,6 +252,7 @@ impl<'a> From<RawRecord<'a>> for Record {
         }
     }
 }
+
 
 fn fields_to_notes<'a>(
     password: Option<&str>,
@@ -374,6 +320,67 @@ fn read_credit_card(title: String, raw: &RawRecord) -> CreditCard {
         notes,
     };
     card
+}
+
+fn read_software_licence(title: String, raw: &RawRecord) -> SoftwareLicence {
+    let version = raw
+        .fields
+        .get("product version")
+        .or_else(|| raw.fields.get("version"))
+        .map(|&s| String::from(s));
+    let license_key = raw
+        .fields
+        .get("license key")
+        .or_else(|| raw.fields.get("reg code"))
+        .map(|&s| String::from(s));
+    let your_name = raw
+        .fields
+        .get("licensed to")
+        .or_else(|| raw.fields.get("reg name"))
+        .map(|&s| String::from(s));
+    let your_email = raw
+        .fields
+        .get("registered email")
+        .or_else(|| raw.fields.get("reg email"))
+        .map(|&s| String::from(s));
+    // let company = raw.fields.get("")
+    let download_link = raw
+        .fields
+        .get("download link")
+        .or_else(|| raw.fields.get("download page"))
+        .map(|link| link.parse().unwrap());
+    let software_publisher = raw
+        .fields
+        .get("publisher name")
+        .or_else(|| raw.fields.get("publisher"))
+        .map(|&s| String::from(s));
+    let publishers_website = raw
+        .fields
+        .get("publisher website")
+        .or_else(|| raw.fields.get("website"))
+        .map(|link| link.parse().unwrap());
+    // let retail_price = raw.fields.get("");
+    let support_email = raw.fields.get("support email").map(|&s| String::from(s));
+    let purchase_date = raw.fields.get("order date").map(|&s| String::from(s));
+    let order_number = raw.fields.get("order number").map(|&s| String::from(s));
+
+    SoftwareLicence {
+        title,
+        version,
+        license_key,
+        your_name,
+        your_email,
+        company: None,
+        download_link,
+        software_publisher,
+        publishers_website,
+        retail_price: None,
+        support_email,
+        purchase_date,
+        order_number,
+        notes: None,
+    }
+        .sanitise()
 }
 
 #[cfg(test)]
@@ -638,6 +645,29 @@ line 3
         });
         assert_eq!(actual, expected)
     }
+
+    #[test]
+    fn test_software_license_with_comments() {
+        let actual = parse_path("tests/deals.macupdate.com SnapHeal Pro.txt");
+        let expected = Record::SoftwareLicence(SoftwareLicence {
+            title: String::from("SnapHeal Pro"),
+            version: Some(String::from("1.0")),
+            license_key: Some(String::from("ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ")),
+            your_name: Some(String::from("Wesley Moore")),
+            your_email: Some(String::from("test@example.com")),
+            company: None,
+            download_link: Some("https://deals.macupdate.com/receipt/1234567890".parse().unwrap()),
+            software_publisher: Some(String::from("MacUpdate Promo")),
+            publishers_website: Some("https://deals.macupdate.com/".parse().unwrap()),
+            retail_price: None,
+            support_email: Some(String::from("support@macupdate.com")),
+            purchase_date: None,
+            order_number: Some(String::from("1234567890")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
 
     #[test]
     fn test_credit_card_1() {

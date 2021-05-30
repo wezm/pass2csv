@@ -85,7 +85,7 @@ fn main() {
 
 fn main_loop(path: &Path) -> Result<(), Box<dyn Error>> {
     let mut writer = Writer::default();
-    for record in walk(&path).take(100) {
+    for record in walk(&path) {
         let record = record?;
         writer.write(&record)?;
     }

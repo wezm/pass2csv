@@ -28,6 +28,12 @@ The tool will produce four CSV files:
 * `notes.csv`
 * `software.csv`
 
+Bugs and Feature Requests
+-------------------------
+
+This was mostly a one off project to get a job done. I'm not likely to
+implement new features or solve bugs but I will probably accept contributions.
+
 Licence
 -------
 

@@ -7,7 +7,7 @@ use url::{ParseError, Url};
 use crate::{CreditCard, Login, Record, SecureNote, SoftwareLicence};
 
 const SKIP_KEYS: &[&str] = &["^html", "^recaptcha", "commit", "op", "label"];
-const SKIP_VALUES: &[&str] = &["✓", "SEND"];
+const SKIP_VALUES: &[&str] = &["✓", "SEND", "Y"];
 const LOGIN_FIELDS: &[&str] = &[
     "*login",
     "*username",
@@ -405,8 +405,7 @@ city: FITZROY
 zipcode: 3065
 state: VIC
 phone1type: CEL
-phone1: 0412345678
-create-account: Y"#;
+phone1: 0412345678"#;
         let expected = Record::Login(Login {
             title: String::from("Myer"),
             website: Some("https://m.myer.com.au/webapp/wcs/stores/servlet/m20OrderShippingBillingDetailsView?catalogId=10051&langId=-1&storeId=10251".parse().unwrap()),

@@ -130,11 +130,18 @@ fn title_from_path(depth: usize, path: &Path) -> String {
     if depth > 2 {
         panic!("unhandled depth > 2")
     } else if depth > 1 {
-        path.parent()
+        let domain = path
+            .parent()
             .and_then(|p| p.file_name())
             .and_then(|os| os.to_str())
             .map(|s| s.to_string())
-            .unwrap()
+            .unwrap();
+        let user = path
+            .file_stem()
+            .and_then(|os| os.to_str())
+            .map(|s| s.to_string())
+            .unwrap();
+        format!("{} ({})", domain, user)
     } else {
         path.file_stem()
             .and_then(|os| os.to_str())
@@ -177,7 +184,6 @@ impl<'a> From<RawRecord<'a>> for Record {
                     .or_else(|| {
                         // Nested item
                         if raw.depth > 1 {
-                            println!("nested item");
                             raw.path
                                 .file_stem()
                                 .and_then(|os| os.to_str())
@@ -188,8 +194,18 @@ impl<'a> From<RawRecord<'a>> for Record {
                     });
                 let website = WEBSITE_FIELDS
                     .iter()
-                    .find_map(|&key| raw.fields.get(key))
-                    .map(|&s| parse_url(s));
+                    .find_map(|&key| raw.fields.get(key).map(|&v| v))
+                    .or_else(|| {
+                        if raw.depth > 1 {
+                            raw.path
+                                .parent()
+                                .and_then(|p| p.file_name())
+                                .and_then(|os| os.to_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|s| parse_url(s));
 
                 // Remove fields that we don't need to retain now
                 raw.fields.retain(|key, _value| {
@@ -551,7 +567,7 @@ line 3
         // Tests that the username, title, and url are picked from the path
         let actual = parse_path("tests/example.com/wezm.txt");
         let expected = Record::Login(Login {
-            title: String::from("example.com"),
+            title: String::from("example.com (wezm)"),
             website: Some("https://example.com".parse().unwrap()),
             username: Some(String::from("wezm")),
             password: Some(String::from("this-is-a-test-password")),

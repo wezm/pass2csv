@@ -1,11 +1,13 @@
 mod parse;
 
+use std::env;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{env, io};
 
 use serde::Serialize;
+use std::fs::File;
+use std::io::Write;
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
 
@@ -62,18 +64,11 @@ struct SecureNote {
     text: String,
 }
 
-fn example() -> Result<(), Box<dyn Error>> {
-    let mut csv = csv::Writer::from_writer(io::stdout());
-    let rec = Login {
-        title: String::from("Title"),
-        website: Some("https://example.com".parse().unwrap()),
-        username: Some(String::from("wezm")),
-        password: Some(String::from("hunter2")),
-        notes: None,
-    };
-
-    csv.serialize(&rec)?;
-    Ok(())
+struct Writer<W: Write> {
+    login: csv::Writer<W>,
+    credit_card: csv::Writer<W>,
+    software_licence: csv::Writer<W>,
+    secure_note: csv::Writer<W>,
 }
 
 fn main() {
@@ -83,10 +78,19 @@ fn main() {
     }
     let path = PathBuf::from(path.unwrap());
 
-    if let Err(err) = walk(&path) {
-        println!("Error: {}", err);
+    if let Err(err) = main_loop(&path) {
+        eprintln!("Error: {}", err);
     }
-    example().unwrap();
+}
+
+fn main_loop(path: &Path) -> Result<(), Box<dyn Error>> {
+    let mut writer = Writer::default();
+    for record in walk(&path).take(100) {
+        let record = record?;
+        writer.write(&record)?;
+    }
+
+    Ok(())
 }
 
 fn gpg_file_or_dir(entry: &DirEntry) -> bool {
@@ -98,9 +102,11 @@ fn gpg_file(entry: &DirEntry) -> bool {
 }
 
 fn docker_credential_helper(entry: &DirEntry) -> bool {
-    entry.path().components().find(|component| {
-        component.as_os_str() == "docker-credential-helpers"
-    }).is_some()
+    entry
+        .path()
+        .components()
+        .find(|component| component.as_os_str() == "docker-credential-helpers")
+        .is_some()
 }
 
 fn not_hidden(entry: &DirEntry) -> bool {
@@ -115,21 +121,28 @@ fn entry_filter(entry: &DirEntry) -> bool {
     not_hidden(entry) && gpg_file_or_dir(entry) && !docker_credential_helper(entry)
 }
 
-fn walk(path: &Path) -> Result<(), Box<dyn Error>> {
+fn walk(path: &Path) -> impl Iterator<Item = Result<Record, Box<dyn Error>>> {
     let walker = WalkDir::new(path).follow_links(true).into_iter();
-    for entry in walker.filter_entry(entry_filter).into_iter() {
-        let entry = entry.unwrap();
-        println!("{}", entry.path().display());
-        if entry.file_type().is_file() {
-            let path = entry.path();
-            let contents = decrypt(path)?;
-            let raw = parse::raw(path, entry.depth(), &contents);
-            println!("{:#?}", raw);
-            let rec = Record::from(raw);
-            println!("{:#?}", rec);
-        }
-    }
-    Ok(())
+    walker
+        .filter_entry(entry_filter)
+        .into_iter()
+        .filter_map(|entry| {
+            let entry = entry.unwrap();
+            eprintln!("{}", entry.path().display());
+            if entry.file_type().is_file() {
+                let path = entry.path();
+                let res = decrypt(path).map(|contents| {
+                    let raw = parse::raw(path, entry.depth(), &contents);
+                    // println!("{:#?}", raw);
+                    let rec = Record::from(raw);
+                    // println!("{:#?}", rec);
+                    rec
+                });
+                Some(res)
+            } else {
+                None
+            }
+        })
 }
 
 fn decrypt(path: &Path) -> Result<String, Box<dyn Error>> {
@@ -202,5 +215,27 @@ impl SoftwareLicence {
             }
         }
         self
+    }
+}
+
+impl Default for Writer<File> {
+    fn default() -> Self {
+        Writer {
+            login: csv::Writer::from_path("logins.csv").unwrap(),
+            credit_card: csv::Writer::from_path("credit_cards.csv").unwrap(),
+            software_licence: csv::Writer::from_path("software.csv").unwrap(),
+            secure_note: csv::Writer::from_path("notes.csv").unwrap(),
+        }
+    }
+}
+
+impl<W: Write> Writer<W> {
+    fn write(&mut self, record: &Record) -> csv::Result<()> {
+        match record {
+            Record::Login(login) => self.login.serialize(login),
+            Record::CreditCard(card) => self.credit_card.serialize(card),
+            Record::SoftwareLicence(licence) => self.software_licence.serialize(licence),
+            Record::SecureNote(note) => self.secure_note.serialize(note),
+        }
     }
 }

@@ -7,7 +7,7 @@ use url::{ParseError, Url};
 use crate::{CreditCard, Login, Record, SecureNote, SoftwareLicence};
 
 const SKIP_KEYS: &[&str] = &["^html", "^recaptcha", "commit", "op", "label"];
-const SKIP_VALUES: &[&str] = &["✓"];
+const SKIP_VALUES: &[&str] = &["✓", "SEND"];
 const LOGIN_FIELDS: &[&str] = &[
     "*login",
     "*username",

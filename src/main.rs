@@ -97,6 +97,12 @@ fn gpg_file(entry: &DirEntry) -> bool {
     entry.path().extension().map_or(false, |ext| ext == "gpg")
 }
 
+fn docker_credential_helper(entry: &DirEntry) -> bool {
+    entry.path().components().find(|component| {
+        component.as_os_str() == "docker-credential-helpers"
+    }).is_some()
+}
+
 fn not_hidden(entry: &DirEntry) -> bool {
     entry.depth() == 0
         || !entry
@@ -106,17 +112,12 @@ fn not_hidden(entry: &DirEntry) -> bool {
 }
 
 fn entry_filter(entry: &DirEntry) -> bool {
-    not_hidden(entry) && gpg_file_or_dir(entry)
+    not_hidden(entry) && gpg_file_or_dir(entry) && !docker_credential_helper(entry)
 }
 
 fn walk(path: &Path) -> Result<(), Box<dyn Error>> {
     let walker = WalkDir::new(path).follow_links(true).into_iter();
-    for entry in walker
-        .filter_entry(entry_filter)
-        .into_iter()
-        .skip(840 + 300 + 100 + 69 + 275 + 87)
-    // .take(10)
-    {
+    for entry in walker.filter_entry(entry_filter).into_iter() {
         let entry = entry.unwrap();
         println!("{}", entry.path().display());
         if entry.file_type().is_file() {

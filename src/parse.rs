@@ -494,6 +494,19 @@ line 3
     }
 
     #[test]
+    fn test_strip_generated_password() {
+        let actual = parse_path("tests/Generated Password for example.com.txt");
+        let expected = Record::Login(Login {
+            title: String::from("example.com"),
+            website: Some("http://example.com".parse().unwrap()),
+            username: None,
+            password: Some(String::from("this-is-a-test-password")),
+            notes: None,
+        });
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
     fn test_keep_domain_in_title_when_ip_address() {
         let actual = parse_path("tests/192.168.0.8 (Administrator).txt");
         let expected = Record::Login(Login {

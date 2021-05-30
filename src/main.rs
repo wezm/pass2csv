@@ -179,6 +179,11 @@ impl Login {
             }
         }
 
+        const GENERATED_FOR: &str = "Generated Password for ";
+        if title.starts_with(GENERATED_FOR) {
+            title.replace_range(..GENERATED_FOR.len(), "");
+        }
+
         // Strip the leading domain name from the title if present
         let candidate = title.contains(' ') && !title.contains('(');
         if let (true, Some(host)) = (candidate, website.as_ref().and_then(|url| url.host_str())) {

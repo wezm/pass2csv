@@ -45,7 +45,8 @@ pub(crate) fn raw<'a>(path: &'a Path, depth: usize, item: &'a str) -> RawRecord<
     }
 
     // Probably a secure note
-    if item.split(':').count() == 2 || item.starts_with("comments: ") {
+    const COMMENTS: &str = "comments: ";
+    if item.split(':').count() == 2 || item.starts_with(COMMENTS) {
         let (key, value) = item.split_once(':').unwrap();
         if !key.contains('\n') {
             let mut fields = LinkedHashMap::new();
@@ -83,8 +84,8 @@ pub(crate) fn raw<'a>(path: &'a Path, depth: usize, item: &'a str) -> RawRecord<
             password = Some(line)
         } else if password.is_some() && fields.len() == 1 && fields.contains_key("comments") {
             // This is a secure note with a password, such as an ssh key
-            let pos = item.find("comments: ").unwrap();
-            let note = &item[pos + "comments: ".len()..];
+            let pos = item.find(COMMENTS).unwrap();
+            let note = &item[pos + COMMENTS.len()..];
             fields.insert(Cow::from("comments"), note);
             return RawRecord {
                 path,
@@ -315,7 +316,7 @@ fn fields_to_notes<'a>(
         .into_iter()
         .filter_map(|(key, value)| {
             if skip_key(&key) || skip_value(password, value) {
-                eprintln!("skip: {} → {}", key, value);
+                // eprintln!("skip: {} → {}", key, value);
                 None
             } else {
                 Some(format!("{}: {}", key, value))
